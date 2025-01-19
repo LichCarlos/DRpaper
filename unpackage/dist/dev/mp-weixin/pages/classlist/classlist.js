@@ -51,13 +51,13 @@ const _sfc_main = {
     };
     common_vendor.onShareAppMessage((e) => {
       return {
-        title: "咸虾米壁纸-" + pageName,
+        title: "东软壁纸-" + pageName,
         path: "/pages/classlist/classlist?id=" + queryParams.classid + "&name=" + pageName
       };
     });
     common_vendor.onShareTimeline(() => {
       return {
-        title: "咸虾米壁纸-" + pageName,
+        title: "东软壁纸-" + pageName,
         query: "id=" + queryParams.classid + "&name=" + pageName
       };
     });

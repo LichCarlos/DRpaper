@@ -201,6 +201,7 @@ const ON_TAB_ITEM_TAP = "onTabItemTap";
 const ON_REACH_BOTTOM = "onReachBottom";
 const ON_PULL_DOWN_REFRESH = "onPullDownRefresh";
 const ON_SHARE_TIMELINE = "onShareTimeline";
+const ON_SHARE_CHAT = "onShareChat";
 const ON_ADD_TO_FAVORITES = "onAddToFavorites";
 const ON_SHARE_APP_MESSAGE = "onShareAppMessage";
 const ON_NAVIGATION_BAR_BUTTON_TAP = "onNavigationBarButtonTap";
@@ -208,10 +209,6 @@ const ON_NAVIGATION_BAR_SEARCH_INPUT_CLICKED = "onNavigationBarSearchInputClicke
 const ON_NAVIGATION_BAR_SEARCH_INPUT_CHANGED = "onNavigationBarSearchInputChanged";
 const ON_NAVIGATION_BAR_SEARCH_INPUT_CONFIRMED = "onNavigationBarSearchInputConfirmed";
 const ON_NAVIGATION_BAR_SEARCH_INPUT_FOCUS_CHANGED = "onNavigationBarSearchInputFocusChanged";
-const customizeRE = /:/g;
-function customizeEvent(str) {
-  return camelize(str.replace(customizeRE, "-"));
-}
 function hasLeadingSlash(str) {
   return str.indexOf("/") === 0;
 }
@@ -260,6 +257,10 @@ function sortObject(obj) {
   }
   return !Object.keys(sortObj) ? obj : sortObj;
 }
+const customizeRE = /:/g;
+function customizeEvent(str) {
+  return camelize(str.replace(customizeRE, "-"));
+}
 const encode = encodeURIComponent;
 function stringifyQuery(obj, encodeStr = encode) {
   const res = obj ? Object.keys(obj).map((key) => {
@@ -286,6 +287,7 @@ const PAGE_HOOKS = [
   ON_PULL_DOWN_REFRESH,
   ON_SHARE_TIMELINE,
   ON_SHARE_APP_MESSAGE,
+  ON_SHARE_CHAT,
   ON_ADD_TO_FAVORITES,
   ON_SAVE_EXIT_STATE,
   ON_NAVIGATION_BAR_BUTTON_TAP,
@@ -319,6 +321,7 @@ const UniLifecycleHooks = [
   ON_SHARE_TIMELINE,
   ON_ADD_TO_FAVORITES,
   ON_SHARE_APP_MESSAGE,
+  ON_SHARE_CHAT,
   ON_SAVE_EXIT_STATE,
   ON_NAVIGATION_BAR_BUTTON_TAP,
   ON_NAVIGATION_BAR_SEARCH_INPUT_CLICKED,
@@ -364,13 +367,15 @@ const invokeCreateErrorHandler = once((app, createErrorHandler2) => {
 const E = function() {
 };
 E.prototype = {
+  _id: 1,
   on: function(name, callback, ctx) {
     var e2 = this.e || (this.e = {});
     (e2[name] || (e2[name] = [])).push({
       fn: callback,
-      ctx
+      ctx,
+      _id: this._id
     });
-    return this;
+    return this._id++;
   },
   once: function(name, callback, ctx) {
     var self2 = this;
@@ -391,13 +396,13 @@ E.prototype = {
     }
     return this;
   },
-  off: function(name, callback) {
+  off: function(name, event) {
     var e2 = this.e || (this.e = {});
     var evts = e2[name];
     var liveEvents = [];
-    if (evts && callback) {
+    if (evts && event) {
       for (var i = evts.length - 1; i >= 0; i--) {
-        if (evts[i].fn === callback || evts[i].fn._ === callback) {
+        if (evts[i].fn === event || evts[i].fn._ === event || evts[i]._id === event) {
           evts.splice(i, 1);
           break;
         }
@@ -1010,25 +1015,9 @@ function promisify$1(name, fn) {
   };
 }
 function formatApiArgs(args, options) {
-  const params = args[0];
-  if (!options || !options.formatArgs || !isPlainObject(options.formatArgs) && isPlainObject(params)) {
+  args[0];
+  {
     return;
-  }
-  const formatArgs = options.formatArgs;
-  const keys = Object.keys(formatArgs);
-  for (let i = 0; i < keys.length; i++) {
-    const name = keys[i];
-    const formatterOrDefaultValue = formatArgs[name];
-    if (isFunction(formatterOrDefaultValue)) {
-      const errMsg = formatterOrDefaultValue(args[0][name], params);
-      if (isString(errMsg)) {
-        return errMsg;
-      }
-    } else {
-      if (!hasOwn$1(params, name)) {
-        params[name] = formatterOrDefaultValue;
-      }
-    }
   }
 }
 function invokeSuccess(id, name, res) {
@@ -1038,8 +1027,18 @@ function invokeSuccess(id, name, res) {
   return invokeCallback(id, extend(res || {}, result));
 }
 function invokeFail(id, name, errMsg, errRes = {}) {
-  const apiErrMsg = name + ":fail" + (errMsg ? " " + errMsg : "");
-  delete errRes.errCode;
+  const errMsgPrefix = name + ":fail";
+  let apiErrMsg = "";
+  if (!errMsg) {
+    apiErrMsg = errMsgPrefix;
+  } else if (errMsg.indexOf(errMsgPrefix) === 0) {
+    apiErrMsg = errMsg;
+  } else {
+    apiErrMsg = errMsgPrefix + " " + errMsg;
+  }
+  {
+    delete errRes.errCode;
+  }
   let res = extend({ errMsg: apiErrMsg }, errRes);
   return invokeCallback(id, res);
 }
@@ -1047,13 +1046,7 @@ function beforeInvokeApi(name, args, protocol, options) {
   {
     validateProtocols(name, args, protocol);
   }
-  if (options && options.beforeInvoke) {
-    const errMsg2 = options.beforeInvoke(args);
-    if (isString(errMsg2)) {
-      return errMsg2;
-    }
-  }
-  const errMsg = formatApiArgs(args, options);
+  const errMsg = formatApiArgs(args);
   if (errMsg) {
     return errMsg;
   }
@@ -1063,7 +1056,9 @@ function parseErrMsg(errMsg) {
     return errMsg;
   }
   if (errMsg.stack) {
-    console.error(errMsg.message + "\n" + errMsg.stack);
+    if (typeof globalThis === "undefined" || !globalThis.harmonyChannel) {
+      console.error(errMsg.message + "\n" + errMsg.stack);
+    }
     return errMsg.message;
   }
   return errMsg;
@@ -1071,7 +1066,7 @@ function parseErrMsg(errMsg) {
 function wrapperTaskApi(name, fn, protocol, options) {
   return (args) => {
     const id = createAsyncApiCallback(name, args, options);
-    const errMsg = beforeInvokeApi(name, [args], protocol, options);
+    const errMsg = beforeInvokeApi(name, [args], protocol);
     if (errMsg) {
       return invokeFail(id, name, errMsg);
     }
@@ -1083,7 +1078,7 @@ function wrapperTaskApi(name, fn, protocol, options) {
 }
 function wrapperSyncApi(name, fn, protocol, options) {
   return (...args) => {
-    const errMsg = beforeInvokeApi(name, args, protocol, options);
+    const errMsg = beforeInvokeApi(name, args, protocol);
     if (errMsg) {
       throw new Error(errMsg);
     }
@@ -1094,7 +1089,7 @@ function wrapperAsyncApi(name, fn, protocol, options) {
   return wrapperTaskApi(name, fn, protocol, options);
 }
 function defineSyncApi(name, fn, protocol, options) {
-  return wrapperSyncApi(name, fn, protocol, options);
+  return wrapperSyncApi(name, fn, protocol);
 }
 function defineAsyncApi(name, fn, protocol, options) {
   return promisify$1(name, wrapperAsyncApi(name, fn, protocol, options));
@@ -1225,7 +1220,7 @@ const OffProtocol = [
   },
   {
     name: "callback",
-    type: Function
+    type: [Function, Number]
   }
 ];
 const API_EMIT = "$emit";
@@ -1236,26 +1231,43 @@ const EmitProtocol = [
     required: true
   }
 ];
-const emitter = new E$1();
+class EventBus {
+  constructor() {
+    this.$emitter = new E$1();
+  }
+  on(name, callback) {
+    return this.$emitter.on(name, callback);
+  }
+  once(name, callback) {
+    return this.$emitter.once(name, callback);
+  }
+  off(name, callback) {
+    if (!name) {
+      this.$emitter.e = {};
+      return;
+    }
+    this.$emitter.off(name, callback);
+  }
+  emit(name, ...args) {
+    this.$emitter.emit(name, ...args);
+  }
+}
+const eventBus = new EventBus();
 const $on = defineSyncApi(API_ON, (name, callback) => {
-  emitter.on(name, callback);
-  return () => emitter.off(name, callback);
+  eventBus.on(name, callback);
+  return () => eventBus.off(name, callback);
 }, OnProtocol);
 const $once = defineSyncApi(API_ONCE, (name, callback) => {
-  emitter.once(name, callback);
-  return () => emitter.off(name, callback);
+  eventBus.once(name, callback);
+  return () => eventBus.off(name, callback);
 }, OnceProtocol);
 const $off = defineSyncApi(API_OFF, (name, callback) => {
-  if (!name) {
-    emitter.e = {};
-    return;
-  }
   if (!isArray(name))
-    name = [name];
-  name.forEach((n2) => emitter.off(n2, callback));
+    name = name ? [name] : [];
+  name.forEach((n2) => eventBus.off(n2, callback));
 }, OffProtocol);
 const $emit = defineSyncApi(API_EMIT, (name, ...args) => {
-  emitter.emit(name, ...args);
+  eventBus.emit(name, ...args);
 }, EmitProtocol);
 let cid;
 let cidErrMsg;
@@ -1517,14 +1529,24 @@ function addSafeAreaInsets(fromRes, toRes) {
     };
   }
 }
-function populateParameters(fromRes, toRes) {
-  const { brand = "", model = "", system = "", language = "", theme, version: version2, platform, fontSizeSetting, SDKVersion, pixelRatio, deviceOrientation } = fromRes;
+function getOSInfo(system, platform) {
   let osName = "";
   let osVersion = "";
-  {
+  if (platform && false) {
+    osName = platform;
+    osVersion = system;
+  } else {
     osName = system.split(" ")[0] || "";
     osVersion = system.split(" ")[1] || "";
   }
+  return {
+    osName: osName.toLocaleLowerCase(),
+    osVersion
+  };
+}
+function populateParameters(fromRes, toRes) {
+  const { brand = "", model = "", system = "", language = "", theme, version: version2, platform, fontSizeSetting, SDKVersion, pixelRatio, deviceOrientation } = fromRes;
+  const { osName, osVersion } = getOSInfo(system, platform);
   let hostVersion = version2;
   let deviceType = getGetDeviceType(fromRes, model);
   let deviceBrand = getDeviceBrand(brand);
@@ -1534,20 +1556,21 @@ function populateParameters(fromRes, toRes) {
   let _SDKVersion = SDKVersion;
   const hostLanguage = language.replace(/_/g, "-");
   const parameters = {
-    appId: "__UNI__B8FCDB7",
-    appName: "咸虾米壁纸",
+    appId: "__UNI__60AE385",
+    appName: "东软壁纸",
     appVersion: "1.0.1",
     appVersionCode: 101,
     appLanguage: getAppLanguage(hostLanguage),
-    uniCompileVersion: "4.29",
-    uniRuntimeVersion: "4.29",
+    uniCompileVersion: "4.36",
+    uniCompilerVersion: "4.36",
+    uniRuntimeVersion: "4.36",
     uniPlatform: "mp-weixin",
     deviceBrand,
     deviceModel: model,
     deviceType,
     devicePixelRatio: _devicePixelRatio,
     deviceOrientation: _deviceOrientation,
-    osName: osName.toLocaleLowerCase(),
+    osName,
     osVersion,
     hostTheme: theme,
     hostVersion,
@@ -1563,7 +1586,8 @@ function populateParameters(fromRes, toRes) {
     ua: void 0,
     hostPackageName: void 0,
     browserName: void 0,
-    browserVersion: void 0
+    browserVersion: void 0,
+    isUniAppX: false
   };
   extend(toRes, parameters);
 }
@@ -1656,14 +1680,17 @@ const showActionSheet = {
 };
 const getDeviceInfo = {
   returnValue: (fromRes, toRes) => {
-    const { brand, model } = fromRes;
+    const { brand, model, system = "", platform = "" } = fromRes;
     let deviceType = getGetDeviceType(fromRes, model);
     let deviceBrand = getDeviceBrand(brand);
     useDeviceId()(fromRes, toRes);
+    const { osName, osVersion } = getOSInfo(system, platform);
     toRes = sortObject(extend(toRes, {
       deviceType,
       deviceBrand,
-      deviceModel: model
+      deviceModel: model,
+      osName,
+      osVersion
     }));
   }
 };
@@ -1678,11 +1705,16 @@ const getAppBaseInfo = {
       hostName: _hostName,
       hostSDKVersion: SDKVersion,
       hostTheme: theme,
-      appId: "__UNI__B8FCDB7",
-      appName: "咸虾米壁纸",
+      appId: "__UNI__60AE385",
+      appName: "东软壁纸",
       appVersion: "1.0.1",
       appVersionCode: 101,
-      appLanguage: getAppLanguage(hostLanguage)
+      appLanguage: getAppLanguage(hostLanguage),
+      isUniAppX: false,
+      uniPlatform: "mp-weixin",
+      uniCompileVersion: "4.36",
+      uniCompilerVersion: "4.36",
+      uniRuntimeVersion: "4.36"
     }));
   }
 };
@@ -3688,9 +3720,6 @@ function flushPreFlushCbs(instance, seen, i = isFlushing ? flushIndex + 1 : 0) {
   for (; i < queue.length; i++) {
     const cb = queue[i];
     if (cb && cb.pre) {
-      if (instance && cb.id !== instance.uid) {
-        continue;
-      }
       if (checkRecursiveUpdates(seen, cb)) {
         continue;
       }
@@ -4862,8 +4891,13 @@ function applyOptions$1(instance) {
       }
     }
   }
-  if (injectOptions) {
-    resolveInjections(injectOptions, ctx, checkDuplicateProperties);
+  function initInjections() {
+    if (injectOptions) {
+      resolveInjections(injectOptions, ctx, checkDuplicateProperties);
+    }
+  }
+  {
+    initInjections();
   }
   if (methods) {
     for (const key in methods) {
@@ -4951,13 +4985,16 @@ function applyOptions$1(instance) {
       createWatcher(watchOptions[key], ctx, publicThis, key);
     }
   }
-  {
+  function initProvides() {
     if (provideOptions) {
       const provides = isFunction(provideOptions) ? provideOptions.call(publicThis) : provideOptions;
       Reflect.ownKeys(provides).forEach((key) => {
         provide(key, provides[key]);
       });
     }
+  }
+  {
+    initProvides();
   }
   {
     if (created) {
@@ -5244,11 +5281,6 @@ function initProps$1(instance, rawProps, isStateful, isSSR = false) {
   instance.attrs = attrs;
 }
 function isInHmrContext(instance) {
-  while (instance) {
-    if (instance.type.__hmrId)
-      return true;
-    instance = instance.parent;
-  }
 }
 function updateProps(instance, rawProps, rawPrevProps, optimized) {
   const {
@@ -5263,7 +5295,7 @@ function updateProps(instance, rawProps, rawPrevProps, optimized) {
     // always force full diff in dev
     // - #1942 if hmr is enabled with sfc component
     // - vite#872 non-sfc component used by sfc component
-    !isInHmrContext(instance) && (optimized || patchFlag > 0) && !(patchFlag & 16)
+    !isInHmrContext() && (optimized || patchFlag > 0) && !(patchFlag & 16)
   ) {
     if (patchFlag & 8) {
       const propsToUpdate = instance.vnode.dynamicProps;
@@ -5281,7 +5313,7 @@ function updateProps(instance, rawProps, rawPrevProps, optimized) {
             }
           } else {
             const camelizedKey = camelize(key);
-            props[camelizedKey] = resolvePropValue(
+            props[camelizedKey] = resolvePropValue$1(
               options,
               rawCurrentProps,
               camelizedKey,
@@ -5312,7 +5344,7 @@ function updateProps(instance, rawProps, rawPrevProps, optimized) {
           if (rawPrevProps && // for camelCase
           (rawPrevProps[key] !== void 0 || // for kebab-case
           rawPrevProps[kebabKey] !== void 0)) {
-            props[key] = resolvePropValue(
+            props[key] = resolvePropValue$1(
               options,
               rawCurrentProps,
               key,
@@ -5372,7 +5404,7 @@ function setFullProps(instance, rawProps, props, attrs) {
     const castValues = rawCastValues || EMPTY_OBJ;
     for (let i = 0; i < needCastKeys.length; i++) {
       const key = needCastKeys[i];
-      props[key] = resolvePropValue(
+      props[key] = resolvePropValue$1(
         options,
         rawCurrentProps,
         key,
@@ -5384,7 +5416,7 @@ function setFullProps(instance, rawProps, props, attrs) {
   }
   return hasAttrsChanged;
 }
-function resolvePropValue(options, props, key, value, instance, isAbsent) {
+function resolvePropValue$1(options, props, key, value, instance, isAbsent) {
   const opt = options[key];
   if (opt != null) {
     const hasDefault = hasOwn$1(opt, "default");
@@ -5765,7 +5797,12 @@ function createComponentInstance(vnode, parent, suspense) {
     rtg: null,
     rtc: null,
     ec: null,
-    sp: null
+    sp: null,
+    // fixed by xxxxxx 用于存储uni-app的元素缓存
+    $uniElements: /* @__PURE__ */ new Map(),
+    $templateUniElementRefs: [],
+    $templateUniElementStyles: {},
+    $eS: {}
   };
   {
     instance.ctx = createDevRenderContext(instance);
@@ -6262,6 +6299,7 @@ function patch(instance, data, oldData) {
     return;
   }
   data = deepCopy(data);
+  data.$eS = instance.$eS || {};
   const ctx = instance.ctx;
   const mpType = ctx.mpType;
   if (mpType === "page" || mpType === "component") {
@@ -6309,21 +6347,29 @@ function setRef$1(instance, isUnmount = false) {
   const {
     setupState,
     $templateRefs,
+    $templateUniElementRefs,
     ctx: { $scope, $mpPlatform }
   } = instance;
   if ($mpPlatform === "mp-alipay") {
     return;
   }
-  if (!$templateRefs || !$scope) {
+  if (!$scope || !$templateRefs && !$templateUniElementRefs) {
     return;
   }
   if (isUnmount) {
-    return $templateRefs.forEach(
+    $templateRefs && $templateRefs.forEach(
       (templateRef) => setTemplateRef(templateRef, null, setupState)
     );
+    $templateUniElementRefs && $templateUniElementRefs.forEach(
+      (templateRef) => setTemplateRef(templateRef, null, setupState)
+    );
+    return;
   }
   const check = $mpPlatform === "mp-baidu" || $mpPlatform === "mp-toutiao";
   const doSetByRefs = (refs) => {
+    if (refs.length === 0) {
+      return [];
+    }
     const mpComponents = (
       // 字节小程序 selectAllComponents 可能返回 null
       // https://github.com/dcloudio/uni-app/issues/3954
@@ -6341,13 +6387,28 @@ function setRef$1(instance, isUnmount = false) {
     });
   };
   const doSet = () => {
-    const refs = doSetByRefs($templateRefs);
-    if (refs.length && instance.proxy && instance.proxy.$scope) {
-      instance.proxy.$scope.setData({ r1: 1 }, () => {
-        doSetByRefs(refs);
-      });
+    if ($templateRefs) {
+      const refs = doSetByRefs($templateRefs);
+      if (refs.length && instance.proxy && instance.proxy.$scope) {
+        instance.proxy.$scope.setData({ r1: 1 }, () => {
+          doSetByRefs(refs);
+        });
+      }
     }
   };
+  if ($templateUniElementRefs && $templateUniElementRefs.length) {
+    nextTick(instance, () => {
+      $templateUniElementRefs.forEach((templateRef) => {
+        if (isArray(templateRef.v)) {
+          templateRef.v.forEach((v) => {
+            setTemplateRef(templateRef, v, setupState);
+          });
+        } else {
+          setTemplateRef(templateRef, templateRef.v, setupState);
+        }
+      });
+    });
+  }
   if ($scope._$setRef) {
     $scope._$setRef(doSet);
   } else {
@@ -6393,7 +6454,9 @@ function setTemplateRef({ r: r2, f: f2 }, refValue, setupState) {
           if (!refValue) {
             return;
           }
-          onBeforeUnmount(() => remove(existing, refValue), refValue.$);
+          if (refValue.$) {
+            onBeforeUnmount(() => remove(existing, refValue), refValue.$);
+          }
         }
       } else if (_isString) {
         if (hasOwn$1(setupState, r2)) {
@@ -6483,7 +6546,10 @@ function renderComponentRoot(instance) {
     },
     inheritAttrs
   } = instance;
+  instance.$uniElementIds = /* @__PURE__ */ new Map();
   instance.$templateRefs = [];
+  instance.$templateUniElementRefs = [];
+  instance.$templateUniElementStyles = {};
   instance.$ei = 0;
   pruneComponentPropsCache2(uid2);
   instance.__counter = instance.__counter === 0 ? 1 : 0;
@@ -6647,12 +6713,25 @@ function setupRenderEffect(instance) {
     effect2.onTrigger = instance.rtg ? (e2) => invokeArrayFns$1(instance.rtg, e2) : void 0;
     update.ownerInstance = instance;
   }
-  update();
+  {
+    update();
+  }
 }
 function unmountComponent(instance) {
   const { bum, scope, update, um } = instance;
   if (bum) {
     invokeArrayFns$1(bum);
+  }
+  {
+    const parentInstance = instance.parent;
+    if (parentInstance) {
+      const $children = parentInstance.ctx.$children;
+      const target = getExposeProxy(instance) || instance.proxy;
+      const index2 = $children.indexOf(target);
+      if (index2 > -1) {
+        $children.splice(index2, 1);
+      }
+    }
   }
   scope.stop();
   if (update) {
@@ -6937,6 +7016,11 @@ function createInvoker(initialValue, instance) {
   const invoker = (e2) => {
     patchMPEvent(e2);
     let args = [e2];
+    if (instance && instance.ctx.$getTriggerEventDetail) {
+      if (typeof e2.detail === "number") {
+        e2.detail = instance.ctx.$getTriggerEventDetail(e2.detail);
+      }
+    }
     if (e2.detail && e2.detail.__args__) {
       args = e2.detail.__args__;
     }
@@ -7069,6 +7153,93 @@ function createApp$1(rootComponent, rootProps = null) {
   return createVueApp(rootComponent, rootProps).use(plugin);
 }
 const createSSRApp = createApp$1;
+function initVueIds(vueIds, mpInstance) {
+  if (!vueIds) {
+    return;
+  }
+  const ids = vueIds.split(",");
+  const len = ids.length;
+  if (len === 1) {
+    mpInstance._$vueId = ids[0];
+  } else if (len === 2) {
+    mpInstance._$vueId = ids[0];
+    mpInstance._$vuePid = ids[1];
+  }
+}
+const EXTRAS = ["externalClasses"];
+function initExtraOptions(miniProgramComponentOptions, vueOptions) {
+  EXTRAS.forEach((name) => {
+    if (hasOwn$1(vueOptions, name)) {
+      miniProgramComponentOptions[name] = vueOptions[name];
+    }
+  });
+}
+const WORKLET_RE = /_(.*)_worklet_factory_/;
+function initWorkletMethods(mpMethods, vueMethods) {
+  if (vueMethods) {
+    Object.keys(vueMethods).forEach((name) => {
+      const matches = name.match(WORKLET_RE);
+      if (matches) {
+        const workletName = matches[1];
+        mpMethods[name] = vueMethods[name];
+        mpMethods[workletName] = vueMethods[workletName];
+      }
+    });
+  }
+}
+function initWxsCallMethods(methods, wxsCallMethods) {
+  if (!isArray(wxsCallMethods)) {
+    return;
+  }
+  wxsCallMethods.forEach((callMethod) => {
+    methods[callMethod] = function(args) {
+      return this.$vm[callMethod](args);
+    };
+  });
+}
+function selectAllComponents(mpInstance, selector, $refs) {
+  const components = mpInstance.selectAllComponents(selector);
+  components.forEach((component) => {
+    const ref2 = component.properties.uR;
+    $refs[ref2] = component.$vm || component;
+  });
+}
+function initRefs(instance, mpInstance) {
+  Object.defineProperty(instance, "refs", {
+    get() {
+      const $refs = {};
+      selectAllComponents(mpInstance, ".r", $refs);
+      const forComponents = mpInstance.selectAllComponents(".r-i-f");
+      forComponents.forEach((component) => {
+        const ref2 = component.properties.uR;
+        if (!ref2) {
+          return;
+        }
+        if (!$refs[ref2]) {
+          $refs[ref2] = [];
+        }
+        $refs[ref2].push(component.$vm || component);
+      });
+      return $refs;
+    }
+  });
+}
+function findVmByVueId(instance, vuePid) {
+  const $children = instance.$children;
+  for (let i = $children.length - 1; i >= 0; i--) {
+    const childVm = $children[i];
+    if (childVm.$scope._$vueId === vuePid) {
+      return childVm;
+    }
+  }
+  let parentVm;
+  for (let i = $children.length - 1; i >= 0; i--) {
+    parentVm = findVmByVueId($children[i], vuePid);
+    if (parentVm) {
+      return parentVm;
+    }
+  }
+}
 const MP_METHODS = [
   "createSelectorQuery",
   "createIntersectionObserver",
@@ -7248,7 +7419,7 @@ function parseApp(instance, parseAppOptions) {
     onLaunch(options) {
       this.$vm = instance;
       const ctx = internalInstance.ctx;
-      if (this.$vm && ctx.$scope) {
+      if (this.$vm && ctx.$scope && ctx.$callHook) {
         return;
       }
       initBaseInstance(internalInstance, {
@@ -7274,19 +7445,16 @@ function parseApp(instance, parseAppOptions) {
     const methods = vueOptions.methods;
     methods && extend(appOptions, methods);
   }
-  if (parseAppOptions) {
-    parseAppOptions.parse(appOptions);
-  }
   return appOptions;
 }
 function initCreateApp(parseAppOptions) {
   return function createApp2(vm) {
-    return App(parseApp(vm, parseAppOptions));
+    return App(parseApp(vm));
   };
 }
 function initCreateSubpackageApp(parseAppOptions) {
   return function createApp2(vm) {
-    const appOptions = parseApp(vm, parseAppOptions);
+    const appOptions = parseApp(vm);
     const app = isFunction(getApp) && getApp({
       allowDefault: true
     });
@@ -7336,93 +7504,6 @@ function initLocale(appVm) {
     }
   });
 }
-function initVueIds(vueIds, mpInstance) {
-  if (!vueIds) {
-    return;
-  }
-  const ids = vueIds.split(",");
-  const len = ids.length;
-  if (len === 1) {
-    mpInstance._$vueId = ids[0];
-  } else if (len === 2) {
-    mpInstance._$vueId = ids[0];
-    mpInstance._$vuePid = ids[1];
-  }
-}
-const EXTRAS = ["externalClasses"];
-function initExtraOptions(miniProgramComponentOptions, vueOptions) {
-  EXTRAS.forEach((name) => {
-    if (hasOwn$1(vueOptions, name)) {
-      miniProgramComponentOptions[name] = vueOptions[name];
-    }
-  });
-}
-const WORKLET_RE = /_(.*)_worklet_factory_/;
-function initWorkletMethods(mpMethods, vueMethods) {
-  if (vueMethods) {
-    Object.keys(vueMethods).forEach((name) => {
-      const matches = name.match(WORKLET_RE);
-      if (matches) {
-        const workletName = matches[1];
-        mpMethods[name] = vueMethods[name];
-        mpMethods[workletName] = vueMethods[workletName];
-      }
-    });
-  }
-}
-function initWxsCallMethods(methods, wxsCallMethods) {
-  if (!isArray(wxsCallMethods)) {
-    return;
-  }
-  wxsCallMethods.forEach((callMethod) => {
-    methods[callMethod] = function(args) {
-      return this.$vm[callMethod](args);
-    };
-  });
-}
-function selectAllComponents(mpInstance, selector, $refs) {
-  const components = mpInstance.selectAllComponents(selector);
-  components.forEach((component) => {
-    const ref2 = component.properties.uR;
-    $refs[ref2] = component.$vm || component;
-  });
-}
-function initRefs(instance, mpInstance) {
-  Object.defineProperty(instance, "refs", {
-    get() {
-      const $refs = {};
-      selectAllComponents(mpInstance, ".r", $refs);
-      const forComponents = mpInstance.selectAllComponents(".r-i-f");
-      forComponents.forEach((component) => {
-        const ref2 = component.properties.uR;
-        if (!ref2) {
-          return;
-        }
-        if (!$refs[ref2]) {
-          $refs[ref2] = [];
-        }
-        $refs[ref2].push(component.$vm || component);
-      });
-      return $refs;
-    }
-  });
-}
-function findVmByVueId(instance, vuePid) {
-  const $children = instance.$children;
-  for (let i = $children.length - 1; i >= 0; i--) {
-    const childVm = $children[i];
-    if (childVm.$scope._$vueId === vuePid) {
-      return childVm;
-    }
-  }
-  let parentVm;
-  for (let i = $children.length - 1; i >= 0; i--) {
-    parentVm = findVmByVueId($children[i], vuePid);
-    if (parentVm) {
-      return parentVm;
-    }
-  }
-}
 const builtInProps = [
   // 百度小程序,快手小程序自定义组件不支持绑定动态事件，动态dataset，故通过props传递事件信息
   // event-opts
@@ -7443,6 +7524,15 @@ const builtInProps = [
 function initDefaultProps(options, isBehavior = false) {
   const properties = {};
   if (!isBehavior) {
+    let observerSlots = function(newVal) {
+      const $slots = /* @__PURE__ */ Object.create(null);
+      newVal && newVal.forEach((slotName) => {
+        $slots[slotName] = true;
+      });
+      this.setData({
+        $slots
+      });
+    };
     builtInProps.forEach((name) => {
       properties[name] = {
         type: null,
@@ -7451,17 +7541,11 @@ function initDefaultProps(options, isBehavior = false) {
     });
     properties.uS = {
       type: null,
-      value: [],
-      observer: function(newVal) {
-        const $slots = /* @__PURE__ */ Object.create(null);
-        newVal && newVal.forEach((slotName) => {
-          $slots[slotName] = true;
-        });
-        this.setData({
-          $slots
-        });
-      }
+      value: []
     };
+    {
+      properties.uS.observer = observerSlots;
+    }
   }
   if (options.behaviors) {
     if (options.behaviors.includes("wx://form-field")) {
@@ -7545,14 +7629,14 @@ function initPageProps({ properties }, rawProps) {
   }
 }
 function findPropsData(properties, isPage2) {
-  return (isPage2 ? findPagePropsData(properties) : findComponentPropsData(properties.uP)) || {};
+  return (isPage2 ? findPagePropsData(properties) : findComponentPropsData(resolvePropValue(properties.uP))) || {};
 }
 function findPagePropsData(properties) {
   const propsData = {};
   if (isPlainObject(properties)) {
     Object.keys(properties).forEach((name) => {
       if (builtInProps.indexOf(name) === -1) {
-        propsData[name] = properties[name];
+        propsData[name] = resolvePropValue(properties[name]);
       }
     });
   }
@@ -7571,6 +7655,9 @@ function initFormField(vm) {
     });
   }
 }
+function resolvePropValue(prop) {
+  return prop;
+}
 function initData(_) {
   return {};
 }
@@ -7581,9 +7668,9 @@ function initPropsObserver(componentOptions) {
       return;
     }
     if (this.$vm) {
-      updateComponentProps(up, this.$vm.$);
-    } else if (this.properties.uT === "m") {
-      updateMiniProgramComponentProperties(up, this);
+      updateComponentProps(resolvePropValue(up), this.$vm.$);
+    } else if (resolvePropValue(this.properties.uT) === "m") {
+      updateMiniProgramComponentProperties(resolvePropValue(up), this);
     }
   };
   {
@@ -7767,7 +7854,7 @@ function initCreatePage(parseOptions2) {
 }
 function initCreatePluginApp(parseAppOptions) {
   return function createApp2(vm) {
-    initAppLifecycle(parseApp(vm, parseAppOptions), vm);
+    initAppLifecycle(parseApp(vm), vm);
   };
 }
 const MPPage = Page;
@@ -7775,7 +7862,10 @@ const MPComponent = Component;
 function initTriggerEvent(mpInstance) {
   const oldTriggerEvent = mpInstance.triggerEvent;
   const newTriggerEvent = function(event, ...args) {
-    return oldTriggerEvent.apply(mpInstance, [customizeEvent(event), ...args]);
+    return oldTriggerEvent.apply(mpInstance, [
+      customizeEvent(event),
+      ...args
+    ]);
   };
   try {
     mpInstance.triggerEvent = newTriggerEvent;

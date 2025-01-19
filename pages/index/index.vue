@@ -32,7 +32,7 @@
 				<uni-icons type="sound-filled" size="20"></uni-icons>
 				<text class="text">公告</text>
 			</view>
-			<view class="center">
+		<!-- 	<view class="center">
 				<swiper vertical autoplay interval="1500" duration="300" circular>
 					<swiper-item v-for="item in noticeList" :key="item._id">
 						<navigator :url="'/pages/notice/detail?id='+item._id">
@@ -43,7 +43,7 @@
 			</view>
 			<view class="right">
 				<uni-icons type="right" size="16" color="#333"></uni-icons>
-			</view>
+			</view> -->
 		</view>
 		
 		<view class="select">
@@ -141,7 +141,7 @@ const goPreview = (id)=>{
 //分享给好友
 onShareAppMessage((e)=>{
 	return {
-		title:"咸虾米壁纸，好看的手机壁纸",
+		title:"东软壁纸，好看的手机壁纸",
 		path:"/pages/classify/classify"
 	}
 })
@@ -149,7 +149,7 @@ onShareAppMessage((e)=>{
 //分享朋友圈
 onShareTimeline(()=>{
 	return {
-		title:"咸虾米壁纸，好看的手机壁纸"
+		title:"东软壁纸，好看的手机壁纸"
 	}
 })
 

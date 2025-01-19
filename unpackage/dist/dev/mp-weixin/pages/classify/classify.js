@@ -24,13 +24,13 @@ const _sfc_main = {
     };
     common_vendor.onShareAppMessage((e) => {
       return {
-        title: "咸虾米壁纸，精选分类",
+        title: "东软壁纸，精选分类",
         path: "/pages/classify/classify"
       };
     });
     common_vendor.onShareTimeline(() => {
       return {
-        title: "咸虾米壁纸，精选分类"
+        title: "东软壁纸，精选分类"
       };
     });
     getClassify();

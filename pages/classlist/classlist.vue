@@ -75,7 +75,7 @@ const getClassList = async ()=>{
 //分享给好友
 onShareAppMessage((e)=>{
 	return {
-		title:"咸虾米壁纸-"+pageName,
+		title:"东软壁纸-"+pageName,
 		path:"/pages/classlist/classlist?id="+queryParams.classid+"&name="+pageName
 	}
 })
@@ -84,7 +84,7 @@ onShareAppMessage((e)=>{
 //分享朋友圈
 onShareTimeline(()=>{
 	return {
-		title:"咸虾米壁纸-"+pageName,
+		title:"东软壁纸-"+pageName,
 		query:"id="+queryParams.classid+"&name="+pageName
 	}
 })

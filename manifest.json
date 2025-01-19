@@ -1,6 +1,6 @@
 {
-    "name" : "咸虾米壁纸",
-    "appid" : "__UNI__B8FCDB7",
+    "name" : "东软壁纸",
+    "appid" : "__UNI__60AE385",
     "description" : "",
     "versionName" : "1.0.1",
     "versionCode" : 101,
@@ -91,6 +91,7 @@
     /* 小程序特有相关 */
     "mp-weixin" : {
         "appid" : "wxffc12cbf179188f1",
+        "appname" : "东软壁纸",
         "setting" : {
             "urlCheck" : false,
             "minified" : true
@@ -115,7 +116,7 @@
     },
     "vueVersion" : "3",
     "h5" : {
-        "title" : "咸虾米壁纸",
+        "title" : "东软壁纸",
         "router" : {
             "base" : "/xxmwall/",
             "mode" : "hash"

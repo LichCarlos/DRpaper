@@ -62,9 +62,9 @@
 			</view>
 		</view>
 		
-		<view class="section">
+<!-- 		<view class="section">
 			<view class="list">
-				<navigator url="/pages/notice/detail?id=653507c6466d417a3718e94b" class="row">
+<!-- 				<navigator url="/pages/notice/detail?id=653507c6466d417a3718e94b" class="row">
 					<view class="left">
 						<uni-icons type="notification-filled" size="20"></uni-icons>
 						<view class="text">订阅更新</view>
@@ -73,9 +73,9 @@
 						<view class="text"></view>
 						<uni-icons type="right" size="15" color="#aaa"></uni-icons>
 					</view>
-				</navigator>
+				</navigator> -->
 				
-				<navigator url="/pages/notice/detail?id=6536358ce0ec19c8d67fbe82" class="row">
+<!-- 				<navigator url="/pages/notice/detail?id=6536358ce0ec19c8d67fbe82" class="row">
 					<view class="left">
 						<uni-icons type="flag-filled" size="20"></uni-icons>
 						<view class="text">常见问题</view>
@@ -84,9 +84,9 @@
 						<view class="text"></view>
 						<uni-icons type="right" size="15" color="#aaa"></uni-icons>
 					</view>
-				</navigator>
-			</view>
-		</view>
+				</navigator> -->
+<!-- 			</view>
+		</view> --> 
 		
 	</view>
 	

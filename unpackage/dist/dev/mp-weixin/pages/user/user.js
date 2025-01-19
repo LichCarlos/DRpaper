@@ -60,28 +60,10 @@ const _sfc_main = {
           type: "right",
           size: "15",
           color: "#aaa"
-        }),
-        n: common_vendor.p({
-          type: "notification-filled",
-          size: "20"
-        }),
-        o: common_vendor.p({
-          type: "right",
-          size: "15",
-          color: "#aaa"
-        }),
-        p: common_vendor.p({
-          type: "flag-filled",
-          size: "20"
-        }),
-        q: common_vendor.p({
-          type: "right",
-          size: "15",
-          color: "#aaa"
         })
       } : {
-        r: common_vendor.unref(utils_system.getNavBarHeight)() + "px",
-        s: common_vendor.p({
+        n: common_vendor.unref(utils_system.getNavBarHeight)() + "px",
+        o: common_vendor.p({
           status: "loading"
         })
       });

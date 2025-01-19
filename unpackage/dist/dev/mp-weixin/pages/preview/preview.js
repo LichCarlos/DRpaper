@@ -189,13 +189,13 @@ const _sfc_main = {
     };
     common_vendor.onShareAppMessage((e) => {
       return {
-        title: "咸虾米壁纸",
+        title: "东软壁纸",
         path: "/pages/preview/preview?id=" + currentId.value + "&type=share"
       };
     });
     common_vendor.onShareTimeline(() => {
       return {
-        title: "咸虾米壁纸",
+        title: "东软壁纸",
         query: "id=" + currentId.value + "&type=share"
       };
     });
